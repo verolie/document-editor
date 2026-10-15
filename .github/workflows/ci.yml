@@ -1,0 +1,28 @@
+# Shared quality gate: called by the preview and production workflows before deploying.
+name: CI
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Lint, type-check and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      # Also generates the Prisma client (backend postinstall).
+      - run: npm ci
+
+      - run: npm run lint -w frontend
+
+      # Type-checks and builds both the frontend and the backend.
+      - run: npm run build
