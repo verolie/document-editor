@@ -94,7 +94,7 @@ jobs:
           DB_DIRECT: ${{ steps.db.outputs.direct }}
         run: |
           url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN" \
-            --env DATABASE_URL="$DB_POOLED" --env DATABASE_URL_UNPOOLED="$DB_DIRECT")
+            --env DATABASE_URL="$DB_POOLED" --env DATABASE_URL_UNPOOLED="$DB_DIRECT" | node .github/scripts/deploy-url.mjs)
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Comment preview link
