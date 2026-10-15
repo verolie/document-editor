@@ -2,7 +2,7 @@
 
 **Live:** https://document-editor-neon.vercel.app
 
-A web app for writing, formatting and sharing documents, in the spirit of a lightweight Google Docs. Users sign up (email + password or Google), create documents, format them with a rich-text editor, import existing files, add images, and share documents with other users as viewers or editors.
+A web app for writing, formatting and sharing documents, in the spirit of a lightweight Google Docs. Users sign in with Google, create documents, format them with a rich-text editor, import existing files, add images, comment, see who else is working on a document, browse version history, export to PDF or Markdown, and share documents with role-based permissions.
 
 ## Features
 
@@ -26,10 +26,40 @@ A web app for writing, formatting and sharing documents, in the spirit of a ligh
 - Headings, bold, italic, underline, lists and pictures from Word files are kept
 - Example files to try are in [`samples/`](samples)
 
+**Collaboration**
+- See who else has the document open, and who is editing (avatars in the header)
+- Saves by other people appear automatically within a few seconds when you have no unsaved changes
+- If two people edit at once, saving shows who saved first and lets you keep your version or load theirs. Nothing is lost: both stay in the version history
+- This is near-real-time (updates every 5 seconds), not simultaneous typing in the same paragraph
+
+**Comments**
+- Select text and click 💬 (or **Ctrl+Alt+M**) to comment; the passage is highlighted
+- Reply, edit or delete your comments, and resolve or reopen threads (replying reopens a resolved thread)
+- Click highlighted text to open its thread. If the text is deleted, the comment stays and says so
+- Comments are stored separately from the document, so commenting never changes the text
+
+**Version history**
+- Every save is kept; saves by the same person within 10 minutes are grouped. The last 50 versions are kept
+- Preview any version and restore it. Restoring adds a new version, so it can be undone
+
+**Export**
+- **Markdown**: downloads a `.md` file (underline is kept as `<u>` HTML; image links point to the app)
+- **PDF**: opens the print dialog with a clean print layout; choose *Save as PDF*
+
 **Accounts and sharing**
-- Sign up / sign in with email and password, or with Google
-- Share a document by email with another registered user as **Can view** or **Can edit**
-- Viewers get a read-only page; only the owner can share or delete
+- Sign in with Google (Gmail). The first sign-in creates the account
+- Share by email with someone who has signed in at least once, as:
+
+  | Role | Read | Comment | Edit & restore versions | Share | Delete, transfer, settings |
+  |---|---|---|---|---|---|
+  | Viewer | ✓ | | | | |
+  | Commenter | ✓ | ✓ | | | |
+  | Editor | ✓ | ✓ | ✓ | if allowed | |
+  | Owner | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+- The owner can let editors share (*Editors can share*) and can **transfer ownership** (the old owner becomes an editor)
+- Anyone can leave a document shared with them
+- Permissions are enforced by the server; the interface only shows what the server allows
 - Images follow the document's sharing: a user can only load an image if they can open a document that uses it
 
 ## Tech stack
@@ -40,7 +70,9 @@ A web app for writing, formatting and sharing documents, in the spirit of a ligh
 | Backend | Node.js, Express 5, TypeScript |
 | Database | PostgreSQL ([Neon](https://neon.tech)) with [Prisma](https://www.prisma.io) ORM and migrations |
 | File storage | [Vercel Blob](https://vercel.com/docs/vercel-blob) (private) in production, local disk in development |
-| Auth | Password hashing with scrypt, sessions in an httpOnly JWT cookie, Google Identity Services |
+| Auth | Google Identity Services (token verified on the server), sessions in an httpOnly JWT cookie |
+| Collaboration | Presence heartbeat every 5 s, optimistic version check on save, comments anchored by quoted text |
+| Export | [turndown](https://github.com/mixmark-io/turndown) (Markdown), browser print (PDF) |
 | File import | [mammoth](https://github.com/mwilliamson/mammoth.js) (.docx), [marked](https://marked.js.org) (.md) |
 | Hosting | [Vercel](https://vercel.com): static frontend + the Express API as one serverless function |
 
@@ -56,13 +88,16 @@ A web app for writing, formatting and sharing documents, in the spirit of a ligh
 │       ├── app.ts          Express app (routes, middleware, error handling)
 │       ├── index.ts        Local server: starts the app, serves the built frontend
 │       ├── auth.ts         Password hashing, sessions, requireAuth middleware
-│       ├── access.ts       Who can open a document (owner / editor / viewer)
+│       ├── access.ts       Roles and permissions (owner / editor / commenter / viewer)
+│       ├── documentAccess.ts  Loads a document and checks a permission
 │       ├── storage.ts      Image file storage (Vercel Blob or local disk)
-│       └── routes/         auth, documents (+ sharing), images, import
+│       └── routes/         auth, documents (+ sharing), comments, versions, presence, images, import
 ├── frontend/
 │   └── src/
 │       ├── pages/          Sign-in, documents list, editor
-│       ├── components/     Toolbar, menus, dialogs, notifications
+│       ├── components/     Toolbar, comments and history panels, menus, dialogs
+│       ├── collab/         Presence polling, comment anchoring and highlights
+│       ├── export.ts       Markdown and PDF export
 │       ├── api.ts          Typed client for the backend API
 │       ├── images.ts       Image compression and upload
 │       └── spacing.ts      Line / paragraph spacing editor extension
@@ -101,7 +136,8 @@ cp backend/.env.example backend/.env
 | `DATABASE_URL` | Yes | Postgres connection string used by the app. For Neon, use the **pooled** URL (host contains `-pooler`) |
 | `DATABASE_URL_UNPOOLED` | Neon only | Direct connection used for migrations (the same URL without `-pooler`). Falls back to `DATABASE_URL` |
 | `JWT_SECRET` | In production | Long random string that signs login sessions. Generate one with `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"` |
-| `GOOGLE_CLIENT_ID` | No | Enables "Continue with Google" (see [Google sign-in](#google-sign-in)) |
+| `GOOGLE_CLIENT_ID` | Yes | Google OAuth client ID; sign-in is Google-only (see [Google sign-in](#google-sign-in)) |
+| `PASSWORD_AUTH_ENABLED` | No | `true` adds email + password sign-in for testing (automated tests, preview deployments). Leave unset in production |
 | `BLOB_READ_WRITE_TOKEN` | No | Stores images in Vercel Blob. Without it, images are saved in `backend/uploads` |
 | `PORT` | No | Backend port, default `5000` |
 
@@ -190,16 +226,23 @@ Then deploy: push to `main`, or open *Actions → Production → Run workflow*. 
 
 ## Google sign-in
 
-1. In the [Google Cloud console](https://console.cloud.google.com/apis/credentials), create an **OAuth client ID** of type **Web application**.
-2. Under **Authorized JavaScript origins**, add `http://localhost:5173` and your production URL (e.g. `https://your-app.vercel.app`).
-3. Set the client ID as `GOOGLE_CLIENT_ID` in `backend/.env` and in Vercel. The Google button appears automatically.
+Sign-in is Google-only, so a Google OAuth client ID is required:
+
+1. In the [Google Cloud console](https://console.cloud.google.com/apis/credentials), configure the **OAuth consent screen** (External, app name, your email), then create an **OAuth client ID** of type **Web application**.
+2. Under **Authorized JavaScript origins**, add `http://localhost:5173` and `https://document-editor-neon.vercel.app` (no path, no trailing slash).
+3. Set the client ID as `GOOGLE_CLIENT_ID` in `backend/.env` and in Vercel (Production and Preview). It isn't a secret.
+
+An existing account with the same email is linked on first Google sign-in, and any old password on it is removed.
+
+Google only allows exact origins, and every preview deployment has a different address, so Google sign-in doesn't work on previews. To test a preview, deploy it with `PASSWORD_AUTH_ENABLED=true` (previews are protected by Vercel login).
 
 ## Limits
 
 - Uploaded files (imports and images) and saved documents: up to **4 MB**, because Vercel rejects request bodies over 4.5 MB
 - Images: PNG, JPG, GIF or WebP. Photos are scaled to 1600 px and must be under 2 MB after compressing; GIFs are kept as-is to preserve animation
 - Import: `.txt`, `.md`, `.docx`. Old `.doc` files must be saved as `.docx` first. Text alignment from Word files is not kept
-- If two people edit the same document at the same time, the last save wins
+- Collaboration updates arrive every 5 seconds and edits aren't merged automatically: if two people save the same document, the second one chooses which version to keep
+- While a document is open, the 5-second heartbeat keeps the Neon database awake, which uses free-tier compute hours
 
 ## Troubleshooting
 

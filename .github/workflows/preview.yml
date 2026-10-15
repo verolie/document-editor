@@ -85,7 +85,8 @@ jobs:
           # Express parses requests itself; turn off Vercel's request helpers.
           NODEJS_HELPERS: "0"
 
-      # The branch's database URLs are set on this deployment only.
+      # The branch's database URLs are set on this deployment only. Google sign-in can't work on
+      # preview URLs (Google needs exact origins), so previews also allow test password sign-in.
       - name: Deploy preview
         id: deploy
         env:
@@ -94,7 +95,8 @@ jobs:
           DB_DIRECT: ${{ steps.db.outputs.direct }}
         run: |
           url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN" \
-            --env DATABASE_URL="$DB_POOLED" --env DATABASE_URL_UNPOOLED="$DB_DIRECT" | node .github/scripts/deploy-url.mjs)
+            --env DATABASE_URL="$DB_POOLED" --env DATABASE_URL_UNPOOLED="$DB_DIRECT" \
+            --env PASSWORD_AUTH_ENABLED=true | node .github/scripts/deploy-url.mjs)
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Comment preview link

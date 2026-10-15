@@ -16,28 +16,42 @@ model User {
   googleId     String?  @unique
   createdAt    DateTime @default(now())
 
-  documents Document[]
-  shares    Share[]
-  images    Image[]
+  documents       Document[]        @relation("OwnedDocuments")
+  editedDocuments Document[]        @relation("LastEditedDocuments")
+  shares          Share[]
+  images          Image[]
+  versions        DocumentVersion[]
+  comments        Comment[]
+  presence        Presence[]
 }
 
 model Document {
-  id        String   @id @default(uuid())
-  ownerId   String
-  title     String
-  content   String   @default("")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(uuid())
+  ownerId         String
+  title           String
+  content         String   @default("")
+  /// Increases with every content save; used to detect two people saving at once.
+  version         Int      @default(1)
+  /// Lets editors (not only the owner) share the document.
+  editorsCanShare Boolean  @default(false)
+  lastEditedById  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  owner  User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  shares Share[]
-  images DocumentImage[]
+  owner        User              @relation("OwnedDocuments", fields: [ownerId], references: [id], onDelete: Cascade)
+  lastEditedBy User?             @relation("LastEditedDocuments", fields: [lastEditedById], references: [id], onDelete: SetNull)
+  shares       Share[]
+  images       DocumentImage[]
+  versions     DocumentVersion[]
+  comments     Comment[]
+  presence     Presence[]
 
   @@index([ownerId])
 }
 
 enum ShareRole {
   viewer
+  commenter
   editor
 }
 
@@ -52,6 +66,65 @@ model Share {
 
   @@id([documentId, userId])
   @@index([userId])
+}
+
+/// A saved state of a document. Saves by the same person within a few minutes share one version.
+model DocumentVersion {
+  id           String    @id @default(uuid())
+  documentId   String
+  /// The document's `version` this snapshot corresponds to.
+  number       Int
+  title        String
+  content      String
+  authorId     String?
+  /// Set when this version was created by restoring an older one.
+  restoredFrom DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  author   User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([documentId, updatedAt])
+}
+
+/// A comment thread (parentId null) or a reply. Threads are anchored to text by quote + context,
+/// so commenting never changes the document itself.
+model Comment {
+  id         String   @id @default(uuid())
+  documentId String
+  authorId   String
+  parentId   String?
+  body       String
+  quote      String?
+  prefix     String?
+  suffix     String?
+  resolved   Boolean  @default(false)
+  /// Set when the author edits the text (updatedAt also changes when a thread is resolved or replied to).
+  editedAt   DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  document Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[] @relation("Replies")
+
+  @@index([documentId])
+  @@index([parentId])
+}
+
+/// Who has a document open right now (refreshed by a heartbeat every few seconds).
+model Presence {
+  documentId String
+  userId     String
+  editing    Boolean  @default(false)
+  lastSeen   DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, userId])
 }
 
 /// An uploaded image. The file itself lives in Vercel Blob (or local disk in development).

@@ -7,7 +7,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:5000',
+      // The e2e tests run their own backend on another port.
+      '/api': process.env.API_PROXY_TARGET ?? 'http://localhost:5000',
     },
   },
 })

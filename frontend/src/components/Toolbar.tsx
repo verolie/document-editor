@@ -30,7 +30,13 @@ function AlignIcon({ align, lines }: { align: Alignment; lines: number[] }) {
   )
 }
 
-export default function Toolbar({ editor, documentId }: { editor: Editor; documentId: string }) {
+interface ToolbarProps {
+  editor: Editor
+  documentId: string
+  onComment: () => void
+}
+
+export default function Toolbar({ editor, documentId, onComment }: ToolbarProps) {
   const state = useEditorState({
     editor,
     selector: ({ editor }) => ({
@@ -47,7 +53,11 @@ export default function Toolbar({ editor, documentId }: { editor: Editor; docume
             : 'paragraph') as BlockType,
       // Empty when the text uses the default size for its block (normal text or a heading).
       fontSize: String(editor.getAttributes('textStyle').fontSize ?? '').replace('px', ''),
-      align: (['center', 'right'] as const).find((a) => editor.isActive({ textAlign: a })) ?? 'left',
+      imageSelected: editor.isActive('image'),
+      // A selected image has its own alignment; otherwise the text's alignment is shown.
+      align: editor.isActive('image')
+        ? ((editor.getAttributes('image').align as Alignment | undefined) ?? 'left')
+        : ((['center', 'right'] as const).find((a) => editor.isActive({ textAlign: a })) ?? 'left'),
       canUndo: editor.can().undo(),
       canRedo: editor.can().redo(),
     }),
@@ -143,10 +153,10 @@ export default function Toolbar({ editor, documentId }: { editor: Editor; docume
       {ALIGNMENTS.map(({ value, label, shortcut, lines }) => (
         <ToolButton
           key={value}
-          label={label}
+          label={state.imageSelected ? `${label} (image)` : label}
           shortcut={shortcut}
           active={state.align === value}
-          onClick={() => editor.chain().focus().setTextAlign(value).run()}
+          onClick={() => editor.chain().focus().setAlignment(value).run()}
         >
           <AlignIcon align={value} lines={lines} />
         </ToolButton>
@@ -154,6 +164,12 @@ export default function Toolbar({ editor, documentId }: { editor: Editor; docume
 
       <SpacingMenu editor={editor} />
       <ImageButton editor={editor} documentId={documentId} />
+      <ToolButton label="Comment on selection" shortcut={`${mod}Alt+M`} onClick={onComment}>
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+          <path d="M3 3.5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H8l-3.5 3v-3H3a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z" />
+          <path d="M5.5 7h7M5.5 9.5h4.5" strokeLinecap="round" />
+        </svg>
+      </ToolButton>
 
       <span className="toolbar-divider" />
 

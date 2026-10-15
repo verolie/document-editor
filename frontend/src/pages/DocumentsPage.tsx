@@ -4,6 +4,7 @@ import { api, type DocSummary, type ImportedFile } from '../api'
 import { useAuth } from '../auth'
 import ConfirmDialog from '../components/ConfirmDialog'
 import ImportModal from '../components/ImportModal'
+import { ROLE_LABEL } from '../components/ShareModal'
 import { useToast } from '../toast'
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
@@ -15,8 +16,9 @@ export default function DocumentsPage() {
   const [docs, setDocs] = useState<DocSummary[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [importOpen, setImportOpen] = useState(false)
-  const [pendingDelete, setPendingDelete] = useState<DocSummary | null>(null)
-  const [deleting, setDeleting] = useState(false)
+  // Deleting an owned document, or leaving one shared with you.
+  const [pending, setPending] = useState<{ doc: DocSummary; action: 'delete' | 'leave' } | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     api
@@ -45,19 +47,23 @@ export default function DocumentsPage() {
     navigate(`/doc/${doc.id}`)
   }
 
-  async function confirmDelete() {
-    const doc = pendingDelete
-    if (!doc) return
-    setDeleting(true)
+  async function confirmPending() {
+    if (!pending || !user) return
+    const { doc, action } = pending
+    setBusy(true)
     try {
-      await api.deleteDocument(doc.id)
+      if (action === 'delete') await api.deleteDocument(doc.id)
+      else await api.leaveDocument(doc.id, user.id)
       setDocs((prev) => prev?.filter((d) => d.id !== doc.id) ?? null)
-      setPendingDelete(null)
-      toast.success(`“${doc.title}” was deleted.`, 'Document deleted')
+      setPending(null)
+      toast.success(
+        action === 'delete' ? `“${doc.title}” was deleted.` : `You no longer have access to “${doc.title}”.`,
+        action === 'delete' ? 'Document deleted' : 'Left document',
+      )
     } catch (err) {
-      toast.error((err as Error).message, 'Could not delete document')
+      toast.error((err as Error).message, action === 'delete' ? 'Could not delete document' : 'Could not leave document')
     } finally {
-      setDeleting(false)
+      setBusy(false)
     }
   }
 
@@ -108,9 +114,14 @@ export default function DocumentsPage() {
               title="My documents"
               docs={owned}
               empty="No documents yet. Create one or upload a .txt, .md or .docx file."
-              onDelete={setPendingDelete}
+              onRemove={(doc) => setPending({ doc, action: 'delete' })}
             />
-            <DocList title="Shared with me" docs={shared} empty="Nothing has been shared with you yet." />
+            <DocList
+              title="Shared with me"
+              docs={shared}
+              empty="Nothing has been shared with you yet."
+              onRemove={(doc) => setPending({ doc, action: 'leave' })}
+            />
           </>
         )}
       </main>
@@ -125,20 +136,31 @@ export default function DocumentsPage() {
       />
 
       <ConfirmDialog
-        open={pendingDelete !== null}
-        title="Delete document?"
-        confirmLabel="Delete"
-        busyLabel="Deleting…"
+        open={pending !== null}
+        title={pending?.action === 'leave' ? 'Leave document?' : 'Delete document?'}
+        confirmLabel={pending?.action === 'leave' ? 'Leave' : 'Delete'}
+        busyLabel={pending?.action === 'leave' ? 'Leaving…' : 'Deleting…'}
         danger
-        busy={deleting}
-        onConfirm={confirmDelete}
-        onCancel={() => setPendingDelete(null)}
+        busy={busy}
+        onConfirm={confirmPending}
+        onCancel={() => setPending(null)}
       >
-        <p>
-          <strong>“{pendingDelete?.title}”</strong> will be permanently deleted, including for anyone
-          it's shared with.
-        </p>
-        <p className="muted">This can't be undone.</p>
+        {pending?.action === 'leave' ? (
+          <>
+            <p>
+              You'll lose access to <strong>“{pending.doc.title}”</strong>.
+            </p>
+            <p className="muted">{pending.doc.owner?.name ?? 'The owner'} can share it with you again.</p>
+          </>
+        ) : (
+          <>
+            <p>
+              <strong>“{pending?.doc.title}”</strong> will be permanently deleted, including for anyone
+              it's shared with.
+            </p>
+            <p className="muted">This can't be undone.</p>
+          </>
+        )}
       </ConfirmDialog>
     </div>
   )
@@ -148,10 +170,11 @@ interface DocListProps {
   title: string
   docs: DocSummary[]
   empty: string
-  onDelete?: (doc: DocSummary) => void
+  /** Delete (owned documents) or leave (shared documents). */
+  onRemove: (doc: DocSummary) => void
 }
 
-function DocList({ title, docs, empty, onDelete }: DocListProps) {
+function DocList({ title, docs, empty, onRemove }: DocListProps) {
   return (
     <section className="doc-section">
       <h2 className="section-label">{title}</h2>
@@ -173,20 +196,18 @@ function DocList({ title, docs, empty, onDelete }: DocListProps) {
                   </span>
                 </span>
                 {doc.role !== 'owner' && (
-                  <span className="badge">{doc.role === 'editor' ? 'Can edit' : 'View only'}</span>
+                  <span className="badge">{ROLE_LABEL[doc.role]}</span>
                 )}
               </Link>
-              {onDelete && (
-                <button
-                  type="button"
-                  className="icon-button"
-                  title="Delete"
-                  aria-label={`Delete ${doc.title}`}
-                  onClick={() => onDelete(doc)}
-                >
-                  🗑
-                </button>
-              )}
+              <button
+                type="button"
+                className="icon-button"
+                title={doc.role === 'owner' ? 'Delete' : 'Leave (remove from my list)'}
+                aria-label={`${doc.role === 'owner' ? 'Delete' : 'Leave'} ${doc.title}`}
+                onClick={() => onRemove(doc)}
+              >
+                {doc.role === 'owner' ? '🗑' : '⎋'}
+              </button>
             </li>
           ))}
         </ul>

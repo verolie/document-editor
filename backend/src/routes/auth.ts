@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, type RequestHandler } from 'express'
 import { OAuth2Client } from 'google-auth-library'
 import {
   clearSession,
@@ -11,6 +11,8 @@ import {
 import { prisma } from '../db.js'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? ''
+// Sign-in is Google-only unless this is turned on (used for automated tests and previews).
+const PASSWORD_AUTH = process.env.PASSWORD_AUTH_ENABLED === 'true'
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID)
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -20,11 +22,16 @@ const normalizeEmail = (value: unknown) =>
 
 export const authRouter = Router()
 
+const passwordAuthOnly: RequestHandler = (_req, res, next) => {
+  if (PASSWORD_AUTH) return next()
+  res.status(403).json({ error: 'Sign in with Google instead' })
+}
+
 authRouter.get('/config', (_req, res) => {
-  res.json({ googleClientId: GOOGLE_CLIENT_ID || null })
+  res.json({ googleClientId: GOOGLE_CLIENT_ID || null, passwordAuth: PASSWORD_AUTH })
 })
 
-authRouter.post('/signup', async (req, res) => {
+authRouter.post('/signup', passwordAuthOnly, async (req, res) => {
   const email = normalizeEmail(req.body?.email)
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
   const password = typeof req.body?.password === 'string' ? req.body.password : ''
@@ -54,7 +61,7 @@ authRouter.post('/signup', async (req, res) => {
   res.status(201).json(publicUser(user))
 })
 
-authRouter.post('/login', async (req, res) => {
+authRouter.post('/login', passwordAuthOnly, async (req, res) => {
   const email = normalizeEmail(req.body?.email)
   const password = typeof req.body?.password === 'string' ? req.body.password : ''
 
@@ -97,10 +104,14 @@ authRouter.post('/google', async (req, res) => {
     where: { OR: [{ googleId: payload.sub }, { email }] },
   })
   const user = existing
-    ? // Link Google to an existing email/password account with the same verified email.
-      existing.googleId
+    ? existing.googleId
       ? existing
-      : await prisma.user.update({ where: { id: existing.id }, data: { googleId: payload.sub } })
+      : // Link Google to an existing account with the same verified email. Its password is
+        // removed: whoever set it never proved they own this email, Google just did.
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: { googleId: payload.sub, passwordHash: null },
+        })
     : await prisma.user.create({
         data: { email, name: payload.name ?? email.split('@')[0], googleId: payload.sub },
       })
