@@ -2,7 +2,7 @@
 
 **Live:** https://document-editor-neon.vercel.app
 
-A web app for writing, formatting and sharing documents, in the spirit of a lightweight Google Docs. Users sign in with Google, create documents, format them with a rich-text editor, import existing files, add images, comment, see who else is working on a document, browse version history, export to PDF or Markdown, and share documents with role-based permissions.
+A web app for writing, formatting and sharing documents, in the spirit of a lightweight Google Docs. Users sign in with Google or with email and password, create documents, format them with a rich-text editor, import existing files, add images, comment, see who else is working on a document, browse version history, export to PDF or Markdown, and share documents with role-based permissions.
 
 ## Features
 
@@ -47,7 +47,8 @@ A web app for writing, formatting and sharing documents, in the spirit of a ligh
 - **PDF**: opens the print dialog with a clean print layout; choose *Save as PDF*
 
 **Accounts and sharing**
-- Sign in with Google (Gmail). The first sign-in creates the account
+- Two ways to sign in: **Continue with Google** (Gmail), or **email and password** ("Create an account" on the sign-in page)
+- Signing in with Google using the email of an existing password account links the two and removes the old password, so nobody can pre-register someone else's email
 - Share by email with someone who has signed in at least once, as:
 
   | Role | Read | Comment | Edit & restore versions | Share | Delete, transfer, settings |
@@ -70,7 +71,7 @@ A web app for writing, formatting and sharing documents, in the spirit of a ligh
 | Backend | Node.js, Express 5, TypeScript |
 | Database | PostgreSQL ([Neon](https://neon.tech)) with [Prisma](https://www.prisma.io) ORM and migrations |
 | File storage | [Vercel Blob](https://vercel.com/docs/vercel-blob) (private) in production, local disk in development |
-| Auth | Google Identity Services (token verified on the server), sessions in an httpOnly JWT cookie |
+| Auth | Google Identity Services (token verified on the server) and email + password (scrypt), sessions in an httpOnly JWT cookie |
 | Collaboration | Presence heartbeat every 5 s, optimistic version check on save, comments anchored by quoted text |
 | Export | [turndown](https://github.com/mixmark-io/turndown) (Markdown), browser print (PDF) |
 | File import | [mammoth](https://github.com/mwilliamson/mammoth.js) (.docx), [marked](https://marked.js.org) (.md) |
@@ -136,8 +137,8 @@ cp backend/.env.example backend/.env
 | `DATABASE_URL` | Yes | Postgres connection string used by the app. For Neon, use the **pooled** URL (host contains `-pooler`) |
 | `DATABASE_URL_UNPOOLED` | Neon only | Direct connection used for migrations (the same URL without `-pooler`). Falls back to `DATABASE_URL` |
 | `JWT_SECRET` | In production | Long random string that signs login sessions. Generate one with `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"` |
-| `GOOGLE_CLIENT_ID` | Yes | Google OAuth client ID; sign-in is Google-only (see [Google sign-in](#google-sign-in)) |
-| `PASSWORD_AUTH_ENABLED` | No | `true` adds email + password sign-in for testing (automated tests, preview deployments). Leave unset in production |
+| `GOOGLE_CLIENT_ID` | No | Google OAuth client ID; adds "Continue with Google" (see [Google sign-in](#google-sign-in)) |
+| `PASSWORD_AUTH_ENABLED` | No | Email + password sign-in is on by default; set to `false` to allow Google sign-in only |
 | `BLOB_READ_WRITE_TOKEN` | No | Stores images in Vercel Blob. Without it, images are saved in `backend/uploads` |
 | `PORT` | No | Backend port, default `5000` |
 
@@ -226,7 +227,7 @@ Then deploy: push to `main`, or open *Actions → Production → Run workflow*. 
 
 ## Google sign-in
 
-Sign-in is Google-only, so a Google OAuth client ID is required:
+Email + password sign-in works without any setup. To add "Continue with Google":
 
 1. In the [Google Cloud console](https://console.cloud.google.com/apis/credentials), configure the **OAuth consent screen** (External, app name, your email), then create an **OAuth client ID** of type **Web application**.
 2. Under **Authorized JavaScript origins**, add `http://localhost:5173` and `https://document-editor-neon.vercel.app` (no path, no trailing slash).
@@ -234,7 +235,7 @@ Sign-in is Google-only, so a Google OAuth client ID is required:
 
 An existing account with the same email is linked on first Google sign-in, and any old password on it is removed.
 
-Google only allows exact origins, and every preview deployment has a different address, so Google sign-in doesn't work on previews. To test a preview, deploy it with `PASSWORD_AUTH_ENABLED=true` (previews are protected by Vercel login).
+Google only allows exact origins, and every preview deployment has a different address, so on previews use email + password sign-in (previews are protected by Vercel login).
 
 ## Limits
 

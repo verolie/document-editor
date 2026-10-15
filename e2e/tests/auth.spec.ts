@@ -11,7 +11,7 @@ base.describe('signed out', () => {
   base('creates an account and lands on the documents page', async ({ page }) => {
     const email = uniqueEmail('signup')
     await page.goto('/login')
-    await page.getByRole('button', { name: 'Create a test account' }).click()
+    await page.getByRole('button', { name: 'Create an account' }).click()
     await page.getByLabel('Name').fill('Ada Lovelace')
     await page.getByLabel('Email').fill(email)
     await page.getByLabel('Password').fill(PASSWORD)
@@ -54,7 +54,7 @@ base.describe('signed out', () => {
     await other.close()
 
     await page.goto('/login')
-    await page.getByRole('button', { name: 'Create a test account' }).click()
+    await page.getByRole('button', { name: 'Create an account' }).click()
     await page.getByLabel('Email').fill(user.email)
     await page.getByLabel('Password').fill(PASSWORD)
     await page.getByRole('button', { name: 'Create account' }).click()

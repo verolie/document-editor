@@ -17,13 +17,14 @@ export default function AuthPage() {
   const navigate = useNavigate()
   const toast = useToast()
   const [config, setConfig] = useState<AuthConfig | null>(null)
+  const [mode, setMode] = useState<Mode>('login')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     api
       .config()
       .then(setConfig)
-      .catch(() => setConfig({ googleClientId: null, passwordAuth: false }))
+      .catch(() => setConfig({ googleClientId: null, passwordAuth: true }))
   }, [])
 
   async function signIn(action: () => Promise<User>, successTitle: string, failTitle: string) {
@@ -39,55 +40,63 @@ export default function AuthPage() {
     }
   }
 
+  const google = config?.googleClientId
+  const password = config?.passwordAuth
+
   return (
     <div className="auth-screen">
       <div className="auth-card">
         <div className="brand">
           <span className="brand-mark">D</span> Docs
         </div>
-        <h1>Sign in to Docs</h1>
-        <p className="muted">Use your Google account (Gmail) to sign in. New here? Signing in creates your account.</p>
+        <h1>{mode === 'login' ? 'Sign in to Docs' : 'Create your account'}</h1>
+        <p className="muted">
+          {google && password
+            ? 'Continue with Google, or use your email and password.'
+            : mode === 'login'
+              ? 'Sign in to open your documents.'
+              : 'Write, format and share documents for free.'}
+        </p>
 
-        {config === null ? (
-          <p className="muted">Loading…</p>
-        ) : config.googleClientId ? (
+        {config === null && <p className="muted">Loading…</p>}
+
+        {google && (
           <div className={busy ? 'google-area busy' : 'google-area'}>
             <GoogleButton
-              clientId={config.googleClientId}
+              clientId={google}
               onCredential={(credential) =>
                 signIn(() => api.google(credential), 'Signed in with Google', 'Google sign-in failed')
               }
               onError={(message) => toast.error(message, 'Google sign-in unavailable')}
             />
           </div>
-        ) : (
-          <p className="notice">
-            Google sign-in isn't set up on this server yet. The site owner needs to set <code>GOOGLE_CLIENT_ID</code>.
-          </p>
         )}
 
-        {config?.passwordAuth && (
-          <>
-            <div className="divider">
-              <span>or, for testing</span>
-            </div>
-            <PasswordForm busy={busy} onSubmit={signIn} />
-          </>
+        {google && password && (
+          <div className="divider">
+            <span>or</span>
+          </div>
+        )}
+
+        {password && <PasswordForm mode={mode} busy={busy} onModeChange={setMode} onSubmit={signIn} />}
+
+        {config && !google && !password && (
+          <p className="notice">Sign-in isn't configured on this server yet.</p>
         )}
       </div>
     </div>
   )
 }
 
-/** Email + password sign-in. Only shown when the server enables it (tests and preview deployments). */
-function PasswordForm({
-  busy,
-  onSubmit,
-}: {
+interface PasswordFormProps {
+  mode: Mode
   busy: boolean
+  onModeChange: (mode: Mode) => void
   onSubmit: (action: () => Promise<User>, successTitle: string, failTitle: string) => void
-}) {
-  const [mode, setMode] = useState<Mode>('login')
+}
+
+/** Email + password sign-in and sign-up, the alternative to Google. */
+function PasswordForm({ mode, busy, onModeChange, onSubmit }: PasswordFormProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -137,13 +146,19 @@ function PasswordForm({
       </button>
       <p className="auth-switch">
         {mode === 'login' ? (
-          <button type="button" className="link" onClick={() => setMode('signup')}>
-            Create a test account
-          </button>
+          <>
+            New here?{' '}
+            <button type="button" className="link" onClick={() => onModeChange('signup')}>
+              Create an account
+            </button>
+          </>
         ) : (
-          <button type="button" className="link" onClick={() => setMode('login')}>
-            I already have an account
-          </button>
+          <>
+            Already have an account?{' '}
+            <button type="button" className="link" onClick={() => onModeChange('login')}>
+              Sign in
+            </button>
+          </>
         )}
       </p>
     </form>

@@ -11,8 +11,8 @@ import {
 import { prisma } from '../db.js'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? ''
-// Sign-in is Google-only unless this is turned on (used for automated tests and previews).
-const PASSWORD_AUTH = process.env.PASSWORD_AUTH_ENABLED === 'true'
+// Email + password sign-in is on unless explicitly turned off (Google sign-in is the other option).
+const PASSWORD_AUTH = process.env.PASSWORD_AUTH_ENABLED !== 'false'
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID)
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -24,7 +24,7 @@ export const authRouter = Router()
 
 const passwordAuthOnly: RequestHandler = (_req, res, next) => {
   if (PASSWORD_AUTH) return next()
-  res.status(403).json({ error: 'Sign in with Google instead' })
+  res.status(403).json({ error: 'Email sign-in is turned off. Sign in with Google instead.' })
 }
 
 authRouter.get('/config', (_req, res) => {
