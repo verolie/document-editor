@@ -156,51 +156,28 @@ So the everyday flow is: open a pull request → test it on its own preview URL 
 
 Deployments come only from these workflows: `vercel.json` turns off Vercel's own Git deployments so nothing deploys twice.
 
-### One-time setup
+### Setup
 
-**1. Create the Vercel project and get its IDs**
+The project is already connected:
 
-From the project root, log in and link (this creates the Vercel project if it doesn't exist):
-
-```bash
-npx vercel login
-npx vercel link
-```
-
-This writes `.vercel/project.json` (not committed) containing `orgId` and `projectId`. You can also create the project from the Vercel dashboard (**Add New → Project**, Framework *Other*, Root `./`) and copy the **Project ID** from *Settings → General*; for a personal account, the org ID is the **Vercel ID** under *Account Settings → General*.
-
-**2. Add environment variables in Vercel** (*Project → Settings → Environment Variables*)
-
-| Variable | Environments | Value |
+| Piece | Where | Status |
 |---|---|---|
-| `DATABASE_URL` | Production only | Pooled Neon URL of the production database (previews get their own branch URL from the workflow) |
-| `JWT_SECRET` | Production and Preview | A long random string, different from your local one |
-| `GOOGLE_CLIENT_ID` | Production and Preview | Optional, for Google sign-in |
+| Vercel project | `verolies-projects/document-editor` (root `./`, framework *Other*, linked to this repo) | IDs are built into the workflows |
+| Vercel environment variables | `DATABASE_URL` (Production), `JWT_SECRET` (Production + Preview) | Set |
+| Image storage | Private Blob store `document-editor-images`, connected to Production + Preview | Set |
+| Neon | Project `tiny-mountain-02320573`, database `document editor` | Built into the workflows |
 
-Then, for images, open the project's **Storage** tab, create a **Blob** store with **Private** access and connect it to Production and Preview (this adds `BLOB_READ_WRITE_TOKEN`).
+**Add three GitHub secrets** (*GitHub repo → Settings → Secrets and variables → Actions → New repository secret*):
 
-**3. Get your Neon details** (from [console.neon.tech](https://console.neon.tech))
+| Secret | Value |
+|---|---|
+| `VERCEL_TOKEN` | Create at [vercel.com/account/tokens](https://vercel.com/account/tokens) (scope: *verolie's projects*) |
+| `NEON_API_KEY` | Create in the [Neon console](https://console.neon.tech) → *Account settings → API keys* |
+| `DATABASE_URL_UNPOOLED` | **Direct** (non-pooled) URL of the production database, used to run migrations (the `DATABASE_URL_UNPOOLED` line in `backend/.env`) |
 
-- **API key**: *Account settings → API keys → Create new API key*
-- **Project ID**: *Project settings → General*
-- **Database name**: shown on the project dashboard (for example `document editor`)
+Then deploy: push to `main`, or open *Actions → Production → Run workflow*. If a secret is missing, the first step of the deploy job names it.
 
-**4. Add GitHub secrets and variables** (*GitHub repo → Settings → Secrets and variables → Actions*)
-
-| Name | Type | Value |
-|---|---|---|
-| `VERCEL_TOKEN` | Secret | Create at [vercel.com/account/tokens](https://vercel.com/account/tokens) |
-| `VERCEL_ORG_ID` | Secret | `orgId` from step 1 |
-| `VERCEL_PROJECT_ID` | Secret | `projectId` from step 1 |
-| `NEON_API_KEY` | Secret | Neon API key from step 3 |
-| `DATABASE_URL_UNPOOLED` | Secret | **Direct** (non-pooled) URL of the production database, used to run migrations |
-| `NEON_PROJECT_ID` | Variable | Neon project ID from step 3 |
-| `NEON_DATABASE` | Variable | Database name from step 3 |
-| `NEON_ROLE` | Variable (optional) | Database role, defaults to `neondb_owner` |
-
-**5. Deploy**
-
-Push to `main`, or open *Actions → Production → Run workflow*. If anything is missing, the first step of the deploy job names the secret or variable to add.
+**Setting this up for a different Vercel or Neon project:** link with `npx vercel link`, add the Vercel variables and Blob store above, then override the built-in IDs with repository secrets `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` and repository variables `NEON_PROJECT_ID` / `NEON_DATABASE` (optionally `NEON_ROLE`).
 
 ### Notes
 
@@ -227,5 +204,5 @@ Push to `main`, or open *Actions → Production → Run workflow*. If anything i
 - **"DATABASE_URL is not set"**: create `backend/.env` (step 2) and restart the backend.
 - **Blank page after updating the app**: the page reloads itself once to pick up the new version; if it still fails, use the **Reload** button.
 - **Google button doesn't appear**: `GOOGLE_CLIENT_ID` is empty, or the backend wasn't restarted after setting it.
-- **Images fail to upload on Vercel**: the Blob store isn't connected yet (see step 2 of the deployment setup).
-- **A deploy workflow fails at "Check required secrets"**: add the secret or variable named in the error (see step 4 of the deployment setup), then re-run the workflow.
+- **Images fail to upload on Vercel**: the Blob store isn't connected yet (see Deployment → Setup).
+- **A deploy workflow fails at "Check required secrets"**: add the secret named in the error (see Deployment → Setup), then re-run the workflow.

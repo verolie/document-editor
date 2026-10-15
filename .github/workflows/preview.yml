@@ -15,10 +15,15 @@ permissions:
   pull-requests: write
 
 env:
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  # Vercel team and project (not secret); override with secrets of the same name if they change.
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID || 'team_Unz0xhMomxOrSsadcihub6QL' }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID || 'prj_6mSZ5qHojg3XrI2zo71V92xVmVGm' }}
   VERCEL_CLI_VERSION: 64.2.0
   NEON_BRANCH: preview/pr-${{ github.event.pull_request.number }}
+  # Neon project and database; override with repository variables if they change.
+  NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID || 'tiny-mountain-02320573' }}
+  NEON_DATABASE: ${{ vars.NEON_DATABASE || 'document editor' }}
+  NEON_ROLE: ${{ vars.NEON_ROLE || 'neondb_owner' }}
 
 jobs:
   ci:
@@ -33,13 +38,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Check required secrets and variables
+      - name: Check required secrets
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
-          NEON_DATABASE: ${{ vars.NEON_DATABASE }}
-        run: node .github/scripts/check-config.mjs VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID NEON_API_KEY NEON_PROJECT_ID NEON_DATABASE
+        run: node .github/scripts/check-config.mjs VERCEL_TOKEN NEON_API_KEY
 
       - uses: actions/setup-node@v5
         with:
@@ -52,11 +55,11 @@ jobs:
         id: neon
         uses: neondatabase/create-branch-action@v6
         with:
-          project_id: ${{ vars.NEON_PROJECT_ID }}
+          project_id: ${{ env.NEON_PROJECT_ID }}
           api_key: ${{ secrets.NEON_API_KEY }}
           branch_name: ${{ env.NEON_BRANCH }}
-          database: ${{ vars.NEON_DATABASE }}
-          role: ${{ vars.NEON_ROLE || 'neondb_owner' }}
+          database: ${{ env.NEON_DATABASE }}
+          role: ${{ env.NEON_ROLE }}
 
       - name: Build connection strings
         id: db
@@ -64,8 +67,8 @@ jobs:
           HOST: ${{ steps.neon.outputs.db_host }}
           HOST_POOLED: ${{ steps.neon.outputs.db_host_pooled }}
           PASSWORD: ${{ steps.neon.outputs.password }}
-          ROLE: ${{ vars.NEON_ROLE || 'neondb_owner' }}
-          DATABASE: ${{ vars.NEON_DATABASE }}
+          ROLE: ${{ env.NEON_ROLE }}
+          DATABASE: ${{ env.NEON_DATABASE }}
         run: node .github/scripts/neon-urls.mjs
 
       - name: Apply migrations to the branch
