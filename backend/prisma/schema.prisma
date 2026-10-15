@@ -1,0 +1,80 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String?
+  googleId     String?  @unique
+  createdAt    DateTime @default(now())
+
+  documents Document[]
+  shares    Share[]
+  images    Image[]
+}
+
+model Document {
+  id        String   @id @default(uuid())
+  ownerId   String
+  title     String
+  content   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner  User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  shares Share[]
+  images DocumentImage[]
+
+  @@index([ownerId])
+}
+
+enum ShareRole {
+  viewer
+  editor
+}
+
+model Share {
+  documentId String
+  userId     String
+  role       ShareRole
+  createdAt  DateTime  @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, userId])
+  @@index([userId])
+}
+
+/// An uploaded image. The file itself lives in Vercel Blob (or local disk in development).
+model Image {
+  id          String   @id @default(uuid())
+  storageKey  String
+  contentType String
+  size        Int
+  uploaderId  String
+  createdAt   DateTime @default(now())
+
+  uploader  User            @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  documents DocumentImage[]
+}
+
+/// Which documents use an image. Anyone who can open one of them can see the image.
+model DocumentImage {
+  documentId String
+  imageId    String
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  image    Image    @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, imageId])
+  @@index([imageId])
+}

@@ -1,0 +1,19 @@
+{
+  "name": "assessment-ajaia",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev:backend": "npm run dev -w backend",
+    "dev:frontend": "npm run dev -w frontend",
+    "build": "npm run build -w frontend && npm run build -w backend",
+    "start": "npm start -w backend",
+    "vercel-build": "npm run db:deploy -w backend && npm run build -w backend && npm run build -w frontend"
+  }
+}

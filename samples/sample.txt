@@ -1,0 +1,12 @@
+Project Kickoff Notes
+
+This is a plain text file. Plain text has no formatting, so every line comes in as normal text. You can add headings, bold, italic, underline and bullet lists in the editor after importing.
+
+Blank lines separate paragraphs. A single line break
+like this one
+stays inside the same paragraph.
+
+Next steps:
+- Write the project brief
+- Share the document with the team
+- Review feedback on Friday
